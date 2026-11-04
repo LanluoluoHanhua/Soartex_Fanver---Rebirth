@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>围墙全套文件一键生成器</title>
+    <style>
+        body { font-family: 'Microsoft YaHei', sans-serif; background-color: #2b2b2b; color: #f0f0f0; padding: 40px; display: flex; justify-content: center; }
+        .container { background-color: #3c3f41; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); width: 480px; }
+        h2 { text-align: center; margin-top: 0; color: #4CAF50; }
+        input { width: 100%; padding: 10px; margin: 15px 0; box-sizing: border-box; border: 1px solid #555; background: #2b2b2b; color: #fff; border-radius: 5px; font-size: 16px; }
+        button { width: 100%; padding: 12px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; font-weight: bold; }
+        button:hover { background-color: #45a049; }
+        
+        /* 两个区块的样式 */
+        .download-section { margin-top: 25px; padding: 15px; border-radius: 8px; background: #2b2b2b; border: 1px solid #444; display: none; }
+        .download-section h3 { margin: 0 0 10px 0; color: #81c784; font-size: 15px; border-bottom: 1px solid #444; padding-bottom: 5px; }
+        .dir-path { font-family: monospace; color: #aaa; font-size: 12px; display: block; margin-bottom: 10px; word-break: break-all; }
+        
+        .btn-download { display: block; text-align: center; color: white; padding: 10px; margin-bottom: 8px; text-decoration: none; border-radius: 5px; font-size: 14px; cursor: pointer; }
+        .btn-blue { background: #007ACC; }
+        .btn-blue:hover { background: #005a9e; }
+        .btn-orange { background: #E67E22; }
+        .btn-orange:hover { background: #d35400; }
+        
+        .sub-links { margin-top: 10px; font-size: 12px; text-align: center; }
+        .sub-links a { color: #aaa; margin: 0 5px; text-decoration: underline; }
+        .sub-links a:hover { color: #fff; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>围墙全套生成器</h2>
+    <label>请输入方块名称 (例如: packed_ice_brick)：</label>
+    <input type="text" id="blockName" placeholder="输入方块名，不带 _wall" autocomplete="off">
+    <button onclick="generateFiles()">生成文件</button>
+    
+    <!-- 区块 1：方块状态 -->
+    <div class="download-section" id="section-states">
+        <h3>📁 目标文件夹：blockstates</h3>
+        <span class="dir-path">assets\minecraft\blockstates\</span>
+        <a id="dl-state" class="btn-download btn-blue" href="#" download>下载 方块状态文件 (1个)</a>
+    </div>
+
+    <!-- 区块 2：模型文件 -->
+    <div class="download-section" id="section-models">
+        <h3>📁 目标文件夹：models\block\wall</h3>
+        <span class="dir-path">assets\minecraft\models\block\wall\</span>
+        <!-- 这个按钮点击会同时下载4个文件 -->
+        <a id="dl-all-models" class="btn-download btn-orange" onclick="downloadAllModels()">一键下载 模型文件 (4个)</a>
+        
+        <div class="sub-links">
+            如果被浏览器拦截，请单独点击：
+            <a id="dl-inv" href="#" download>inventory</a> | 
+            <a id="dl-post" href="#" download>post</a> | 
+            <a id="dl-side" href="#" download>side</a> | 
+            <a id="dl-side-tall" href="#" download>side_tall</a>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 用于存储生成的内容，方便一键下载
+    let generatedFiles = {};
+
+    function generateFiles() {
+        let baseName = document.getElementById('blockName').value.trim();
+        if (!baseName) {
+            alert("请先输入方块名称！");
+            return;
+        }
+
+        // 1. blockstates 模板
+        let stateJson = `{
+    "multipart": [
+        {   "when": { "up": "true" },
+            "apply": { "model": "block/wall/${baseName}_wall_post" }
+        },
+        {   "when": { "north": "low" },
+            "apply": { "model": "block/wall/${baseName}_wall_side", "uvlock": true }
+        },
+        {   "when": { "east": "low" },
+            "apply": { "model": "block/wall/${baseName}_wall_side", "y": 90, "uvlock": true }
+        },
+        {   "when": { "south": "low" },
+            "apply": { "model": "block/wall/${baseName}_wall_side", "y": 180, "uvlock": true }
+        },
+        {   "when": { "west": "low" },
+            "apply": { "model": "block/wall/${baseName}_wall_side", "y": 270, "uvlock": true }
+        },
+        {   "when": { "north": "tall" },
+            "apply": { "model": "block/wall/${baseName}_wall_side_tall", "uvlock": true }
+        },
+        {   "when": { "east": "tall" },
+            "apply": { "model": "block/wall/${baseName}_wall_side_tall", "y": 90, "uvlock": true }
+        },
+        {   "when": { "south": "tall" },
+            "apply": { "model": "block/wall/${baseName}_wall_side_tall", "y": 180, "uvlock": true }
+        },
+        {   "when": { "west": "tall" },
+            "apply": { "model": "block/wall/${baseName}_wall_side_tall", "y": 270, "uvlock": true }
+        }
+    ]
+}`;
+
+        // 2. side.json 模板
+        let sideJson = `{
+    "parent": "block/wall/wall_side",
+    "textures": {
+        "side": "block/wall/${baseName}/wall_side",
+        "top": "block/wall/${baseName}/wall_top",
+        "normal": "block/${baseName}"
+    }
+}`;
+
+        // 3. side_tall.json 模板
+        let sideTallJson = `{
+    "parent": "block/wall/wall_side_tall",
+    "textures": {
+        "side": "block/wall/${baseName}/wall_side_tall",
+        "top": "block/wall/${baseName}/wall_top",
+        "normal": "block/${baseName}"
+    }
+}`;
+
+        // 4. post.json 模板
+        let postJson = `{
+    "parent": "block/wall/wall_post",
+    "textures": {
+        "side": "block/wall/${baseName}/post_side",
+        "top": "block/wall/${baseName}/post_top",
+        "normal": "block/${baseName}"
+    }
+}`;
+
+        // 5. inventory.json 模板
+        let invJson = `{
+    "parent": "block/wall/wall_inventory",
+    "textures": {
+        "wall": "block/${baseName}",
+        "side": "block/wall/${baseName}/wall_side",
+        "top": "block/wall/${baseName}/wall_top",
+        "post_top": "block/wall/${baseName}/post_top",
+        "post_side": "block/wall/${baseName}/post_side"
+    },
+    "display": {
+        "gui": { "rotation": [ 30, 135, 0], "translation": [ 0, 0, 0], "scale":[ 0.625, 0.625, 0.625 ] },
+        "ground": { "rotation": [ 0, 0, 0 ], "translation": [ 0, 3, 0], "scale":[ 0.25, 0.25, 0.25 ] },
+        "fixed": { "rotation": [ 0, 0, 0 ], "translation": [ 0, 0, 0], "scale":[ 0.5, 0.5, 0.5 ] },
+        "thirdperson_righthand": { "rotation": [ 75, 45, 0 ], "translation": [ 0, 2.5, 0], "scale": [ 0.375, 0.375, 0.375 ] },
+        "firstperson_righthand": { "rotation": [ 0, 45, 0 ], "translation": [ 0, 0, 0 ], "scale": [ 0.40, 0.40, 0.40 ] },
+        "firstperson_lefthand": { "rotation": [ 0, 225, 0 ], "translation": [ 0, 0, 0 ], "scale": [ 0.40, 0.40, 0.40 ] }
+    }
+}`;
+
+        // 记录文件名与内容
+        generatedFiles = {
+            [`${baseName}_wall.json`]: stateJson,
+            [`${baseName}_wall_inventory.json`]: invJson,
+            [`${baseName}_wall_post.json`]: postJson,
+            [`${baseName}_wall_side.json`]: sideJson,
+            [`${baseName}_wall_side_tall.json`]: sideTallJson
+        };
+
+        // 绑定单独下载链接
+        bindDownloadLink('dl-state', `${baseName}_wall.json`, stateJson);
+        bindDownloadLink('dl-inv', `${baseName}_wall_inventory.json`, invJson);
+        bindDownloadLink('dl-post', `${baseName}_wall_post.json`, postJson);
+        bindDownloadLink('dl-side', `${baseName}_wall_side.json`, sideJson);
+        bindDownloadLink('dl-side-tall', `${baseName}_wall_side_tall.json`, sideTallJson);
+        
+        // 显示界面
+        document.getElementById('section-states').style.display = 'block';
+        document.getElementById('section-models').style.display = 'block';
+    }
+
+    function bindDownloadLink(id, filename, content) {
+        let link = document.getElementById(id);
+        let blob = new Blob([content], { type: 'application/json' });
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+    }
+
+    // 一键下载4个模型
+    function downloadAllModels() {
+        let modelFiles = Object.keys(generatedFiles).filter(name => name.includes('_wall_') || name.includes('_wall.json') === false);
+        // 过滤出4个模型（排除 _wall.json，因为那是方块状态）
+        let count = 0;
+        for (let filename in generatedFiles) {
+            if (filename !== document.getElementById('blockName').value.trim() + "_wall.json") {
+                let blob = new Blob([generatedFiles[filename]], { type: 'application/json' });
+                let url = URL.createObjectURL(blob);
+                let a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                count++;
+            }
+        }
+        if (count > 0) {
+            alert(`已触发 ${count} 个模型文件下载！\n如果浏览器弹窗拦截，请点击允许，或者使用下方的单独下载链接。`);
+        }
+    }
+</script>
+
+</body>
+</html>
