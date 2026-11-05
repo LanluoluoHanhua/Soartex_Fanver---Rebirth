@@ -7,7 +7,9 @@
         body { font-family: 'Microsoft YaHei', sans-serif; background-color: #2b2b2b; color: #f0f0f0; padding: 40px; display: flex; justify-content: center; }
         .container { background-color: #3c3f41; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); width: 500px; }
         h2 { text-align: center; margin-top: 0; color: #4CAF50; }
-        input { width: 100%; padding: 10px; margin: 15px 0; box-sizing: border-box; border: 1px solid #555; background: #2b2b2b; color: #fff; border-radius: 5px; font-size: 16px; }
+        input, textarea { width: 100%; padding: 10px; margin: 15px 0; box-sizing: border-box; border: 1px solid #555; background: #2b2b2b; color: #fff; border-radius: 5px; font-size: 16px; font-family: inherit; }
+        textarea { min-height: 46px; line-height: 1.5; resize: none; overflow-y: hidden; white-space: pre-wrap; word-break: break-all; }
+        textarea:focus { outline: none; border-color: #4CAF50; }
         button { width: 100%; padding: 12px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; font-weight: bold; }
         button:hover { background-color: #45a049; }
         
@@ -20,6 +22,8 @@
         .btn-blue:hover { background: #005a9e; }
         .btn-orange { background: #E67E22; }
         .btn-orange:hover { background: #d35400; }
+        .btn-purple { background: #8E44AD; }
+        .btn-purple:hover { background: #732d91; }
         .btn-green { background: #27AE60; }
         .btn-green:hover { background: #219150; }
         
@@ -27,24 +31,29 @@
         .sub-links a { color: #aaa; margin: 0 5px; text-decoration: underline; }
         .sub-links a:hover { color: #fff; }
 
+        /* 批量下载列表的样式 */
         #items-dynamic-links { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
         .dynamic-link { background: #444; color: #ccc; padding: 6px; border-radius: 4px; text-decoration: none; font-size: 12px; text-align: center; border: 1px solid #555; }
         .dynamic-link:hover { background: #555; color: #fff; }
+
+        .subtitle { text-align: center; color: #9e9e9e; font-size: 13px; letter-spacing: 1px; margin: -10px 0 20px 0; }
+        .subtitle span { color: #4CAF50; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h2>围墙生成器 (支持批量)</h2>
-    <label>请输入方块名称：</label>
-    <input type="text" id="blockName" placeholder="单个: packed_ice_brick | 多个: ice, cinnabar, copper" autocomplete="off">
+    <p class="subtitle">设计：<span>Lanluoluo</span>　制作：<span>Deepseek</span></p>
+    <label for="blockName">请输入方块名称：</label>
+    <textarea id="blockName" rows="1" placeholder="单个: packed_ice_brick&#10;多个: ice, cinnabar, copper（逗号或换行分隔，Ctrl+Enter 生成）" autocomplete="off"></textarea>
     <button onclick="generateFiles()">生成文件</button>
     
     <!-- 区块 1：方块状态 -->
     <div class="download-section" id="section-states">
         <h3>📁 目标文件夹：blockstates</h3>
         <span class="dir-path">assets\minecraft\blockstates\</span>
-        <a id="dl-state" class="btn-download btn-blue" href="#" download>下载 方块状态文件 (1个)</a>
+        <a id="dl-state" class="btn-download btn-blue" href="#" download>下载 方块状态文件</a>
     </div>
 
     <!-- 区块 2：模型文件 -->
@@ -65,13 +74,37 @@
     <div class="download-section" id="section-items">
         <h3>📁 目标文件夹：items</h3>
         <span class="dir-path">assets\minecraft\items\</span>
-        <!-- 注意这里移除了 href，完全通过 onclick 触发，避免重复下载 -->
-        <a id="dl-all-items" class="btn-download btn-green" onclick="downloadAllItems()">下载 物品指引文件</a>
+        <!-- 批量下载按钮 -->
+        <a id="dl-all-items" class="btn-download btn-green" onclick="downloadAllItems()">一键下载所有 物品指引文件</a>
+        <!-- 动态生成的单独下载列表 -->
         <div id="items-dynamic-links"></div>
     </div>
 </div>
 
 <script>
+    let generatedFiles = {};
+
+    // 输入框随内容自动增高
+    const blockNameInput = document.getElementById('blockName');
+    function autoResize(el) {
+        const cs = getComputedStyle(el);
+        const border = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+        el.style.height = 'auto';
+        const maxH = 260;                                  // 超过这个高度就出现内部滚动条
+        const need = el.scrollHeight + border;
+        el.style.height = Math.min(need, maxH) + 'px';
+        el.style.overflowY = need > maxH ? 'auto' : 'hidden';
+    }
+    blockNameInput.addEventListener('input', () => autoResize(blockNameInput));
+    // Ctrl+Enter / Cmd+Enter 快捷生成（普通 Enter 仍然可以换行）
+    blockNameInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            generateFiles();
+        }
+    });
+    autoResize(blockNameInput);
+
     function generateFiles() {
         let rawInput = document.getElementById('blockName').value.trim();
         if (!rawInput) {
@@ -79,15 +112,25 @@
             return;
         }
 
-        let names = rawInput.split(/[,，]/).map(n => n.trim()).filter(n => n);
+        // 支持中英文逗号及换行分隔
+        let names = rawInput.split(/[,，\r\n]+/).map(n => n.trim()).filter(n => n);
         let isBatch = names.length > 1;
 
+        // 清理旧状态
+        generatedFiles = {};
         document.getElementById('items-dynamic-links').innerHTML = '';
+        
+        // 隐藏所有区块，根据情况重新显示
         document.getElementById('section-states').style.display = 'none';
         document.getElementById('section-models').style.display = 'none';
         document.getElementById('section-items').style.display = 'none';
 
+        let itemBtn = document.getElementById('dl-all-items');
+
         if (!isBatch) {
+            // ==============================
+            // 单输入模式：生成全套 6 个文件
+            // ==============================
             let baseName = names[0];
 
             let stateJson = getStateJson(baseName);
@@ -95,6 +138,15 @@
             let sideTallJson = getSideTallJson(baseName);
             let postJson = getPostJson(baseName);
             let invJson = getInvJson(baseName);
+            let itemJson = getItemJson(baseName);
+
+            generatedFiles = {
+                [`${baseName}_wall.json`]: stateJson,
+                [`${baseName}_wall_inventory.json`]: invJson,
+                [`${baseName}_wall_post.json`]: postJson,
+                [`${baseName}_wall_side.json`]: sideJson,
+                [`${baseName}_wall_side_tall.json`]: sideTallJson
+            };
 
             bindDownloadLink('dl-state', `${baseName}_wall.json`, stateJson);
             bindDownloadLink('dl-inv', `${baseName}_wall_inventory.json`, invJson);
@@ -105,15 +157,28 @@
             document.getElementById('section-states').style.display = 'block';
             document.getElementById('section-models').style.display = 'block';
             document.getElementById('section-items').style.display = 'block';
-            document.getElementById('dl-all-items').innerText = "下载 物品指引文件";
+
+            // 单个物品文件：只靠 href 下载，移除批量下载的 onclick，避免把 blockstate 也当 item 下下来
+            itemBtn.removeAttribute('onclick');
+            itemBtn.setAttribute('href', '#');
+            itemBtn.setAttribute('download', '');
+            bindDownloadLink('dl-all-items', `${baseName}_wall.json`, itemJson);
+            itemBtn.innerText = "下载 物品指引文件";
 
         } else {
+            // ==============================
+            // 批量模式：仅生成 items 目录下的文件
+            // ==============================
             let dynamicContainer = document.getElementById('items-dynamic-links');
 
-            names.forEach((baseName) => {
+            names.forEach((baseName, index) => {
                 let itemJson = getItemJson(baseName);
                 let filename = `${baseName}_wall.json`;
                 
+                // 存入对象，供一键下载使用
+                generatedFiles[filename] = itemJson;
+
+                // 创建单独的下载链接，方便用户手动点击
                 let a = document.createElement('a');
                 a.className = 'dynamic-link';
                 a.textContent = `单独下载: ${filename}`;
@@ -124,10 +189,16 @@
             });
 
             document.getElementById('section-items').style.display = 'block';
-            document.getElementById('dl-all-items').innerText = `一键下载 批量指引文件 (${names.length}个)`;
+
+            // 批量模式：挂回一键下载，并清掉单输入时留下的 href，避免跟随旧 blob 再下一次
+            itemBtn.setAttribute('onclick', 'downloadAllItems()');
+            itemBtn.removeAttribute('href');
+            itemBtn.removeAttribute('download');
+            itemBtn.innerText = `一键下载 批量指引文件 (${names.length}个)`;
         }
     }
 
+    // --- 绑定单个下载链接的辅助函数 ---
     function bindDownloadLink(id, filename, content) {
         let link = document.getElementById(id);
         let blob = new Blob([content], { type: 'application/json' });
@@ -135,55 +206,55 @@
         link.download = filename;
     }
 
-    // --- 核心修复：直接根据输入动态生成并下载 items 文件，不再依赖前面的变量 ---
+    // --- 触发一键下载全部 Items（仅在批量模式下调用）---
     function downloadAllItems() {
-        let rawInput = document.getElementById('blockName').value.trim();
-        let names = rawInput.split(/[,，]/).map(n => n.trim()).filter(n => n);
-        if (names.length === 0) return;
-
         let count = 0;
-        names.forEach(baseName => {
-            let itemJson = getItemJson(baseName);
-            let filename = `${baseName}_wall.json`;
-            
-            let blob = new Blob([itemJson], { type: 'application/json' });
-            let url = URL.createObjectURL(blob);
-            let a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            count++;
-        });
-
+        for (let filename in generatedFiles) {
+            // 只下载名字形如 xxx_wall.json 的文件
+            if (filename.endsWith('_wall.json')) {
+                let blob = new Blob([generatedFiles[filename]], { type: 'application/json' });
+                let url = URL.createObjectURL(blob);
+                let a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                count++;
+            }
+        }
         if (count > 0) {
-            alert(`已触发 ${count} 个物品指引文件下载！\n如果浏览器拦截，请允许，或使用下方列表单独下载。`);
+            alert(`已触发 ${count} 个物品指引文件下载！\n如果浏览器提示“阻止多个文件下载”，请点击允许，或使用下方列表单独下载。`);
         }
     }
 
+    // --- 触发一键下载 4 个模型 ---
     function downloadAllModels() {
-        let baseName = document.getElementById('blockName').value.trim().split(/[,，]/)[0].trim();
+        let baseName = document.getElementById('blockName').value.trim().split(/[,，\r\n]+/)[0].trim();
         let modelFiles = [
-            { name: `${baseName}_wall_inventory.json`, content: getInvJson(baseName) },
-            { name: `${baseName}_wall_post.json`, content: getPostJson(baseName) },
-            { name: `${baseName}_wall_side.json`, content: getSideJson(baseName) },
-            { name: `${baseName}_wall_side_tall.json`, content: getSideTallJson(baseName) }
+            `${baseName}_wall_inventory.json`,
+            `${baseName}_wall_post.json`,
+            `${baseName}_wall_side.json`,
+            `${baseName}_wall_side_tall.json`
         ];
         
-        modelFiles.forEach(file => {
-            let blob = new Blob([file.content], { type: 'application/json' });
-            let url = URL.createObjectURL(blob);
-            let a = document.createElement('a');
-            a.href = url;
-            a.download = file.name;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        });
-        alert(`已触发 4 个模型文件下载！`);
+        let count = 0;
+        for (let filename of modelFiles) {
+            if (generatedFiles[filename]) {
+                let blob = new Blob([generatedFiles[filename]], { type: 'application/json' });
+                let url = URL.createObjectURL(blob);
+                let a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                count++;
+            }
+        }
+        if (count > 0) alert(`已触发 ${count} 个模型文件下载！`);
     }
 
     // ================== 模板生成函数 ==================
